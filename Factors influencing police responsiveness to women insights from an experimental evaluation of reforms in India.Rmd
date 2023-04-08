@@ -1,0 +1,596 @@
+---
+title: "Factors influencing police responsiveness to women: insights from an experimental evaluation of reforms in India"
+author: "Ciel Zhao"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+  
+```{r}
+# Data Cleaning and Joining
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+setwd('F:\\Mine\\0Mine\\TC-22fall\\HUDM5026 - Intro to Data Analysis in R\\Final Project\\Project')
+library(pacman)
+p_load(haven, tidyverse, ggplot2, knitr, kableExtra, patchwork, corrplot)
+
+admin <- read_dta('Data/Admin/admin_long data.dta')
+# View(admin)
+admin <- admin %>% select(month,
+                          ps_code,
+                          dist_id,
+                          dist_urban,
+                          treatment,
+                          group,
+                          regular_whd,
+                          women_whd,
+                          fir_caw_count,
+                          fir_bywomen_count,
+                          arrest_count,
+                          dir_count
+)
+# str(admin)
+
+admin1 <- admin %>% select(ps_code,
+                           regular_whd,
+                           women_whd,
+                           fir_caw_count,
+                           fir_bywomen_count,
+                           arrest_count,
+                           dir_count) %>%
+  group_by(ps_code) %>%
+  summarise(regular_whd = mean(regular_whd),
+            women_whd = mean(women_whd),
+            fir_caw = sum(fir_caw_count),
+            fir_bywomen = sum(fir_bywomen_count),
+            arrest = sum(arrest_count),
+            dir = sum(dir_count))
+
+# View(admin1)
+# u_admin <- unique(admin$dist_urban)
+# u_admin
+# length(u_admin)
+
+c_caw <- read_dta('Data/Citizen survey/citizen_caw rates.dta')
+# View(c_caw)
+c_caw <- c_caw %>% select(ps_code,
+                          b_caw_rate,
+                          e_caw_rate) %>%
+  group_by(ps_code) %>%
+  summarise(b_caw_rate = mean(b_caw_rate),
+            e_caw_rate = mean(e_caw_rate))
+# str(c_caw)
+
+c_full <- read_dta('Data/Citizen survey/citizen_full data.dta')
+# View(c_full)
+c_full <- c_full %>% select(ps_code,
+                            b_pol_handling,
+                            e_pol_handling,
+                            b_safety,
+                            e_safety) %>%
+  group_by(ps_code) %>%
+  summarise(b_pol_handling = mean(na.omit(b_pol_handling)),
+            e_pol_handling = mean(na.omit(e_pol_handling)),
+            b_safety = mean(na.omit(b_safety)),
+            e_safety = mean(na.omit(e_safety)))
+# str(c_full)
+
+police1 <- read_dta('Data/Police survey/police_full data.dta')
+# View(police1)
+police1 <- police1 %>% select(ps_code,
+                            e_taken_seriously,
+                            b_wcase,
+                            e_wcase,
+                            b_effective,
+                            e_effective) %>%
+  group_by(ps_code) %>%
+  summarise(e_taken_seriously = mean(na.omit(e_taken_seriously)),
+            b_wcase = mean(na.omit(b_wcase)),
+            e_wcase = mean(na.omit(e_wcase)),
+            b_effective = mean(na.omit(b_effective)),
+            e_effective = mean(na.omit(e_effective)))
+
+police2 <- read_dta('Data/Police survey/police_station personnel data.dta')
+# View(police2)
+police2 <- police2 %>% select(ps_code,
+                            b_total_staff,
+                            b_female_staff,
+                            b_total_officers,
+                            b_female_officers,
+                            b_total_sampled,
+                            b_female_sampled,
+                            b_total_surveyed,
+                            b_female_surveyed,
+                            e_total_staff,
+                            e_female_staff,
+                            e_total_officers,
+                            e_female_officers,
+                            e_total_sampled,
+                            e_female_sampled,
+                            e_total_surveyed,
+                            e_female_surveyed,
+)
+
+police2 <- police2 %>% mutate(b_female_staff_rate=b_female_staff/b_total_staff,
+                              b_female_officers_rate=b_female_officers/b_total_officers,
+                              b_female_sampled_rate=b_female_sampled/b_total_sampled,
+                              b_female_surveyed_rate=b_female_surveyed/b_total_sampled,
+                              e_female_staff_rate=e_female_staff/e_total_staff,
+                              e_female_officers_rate=e_female_officers/e_total_officers,
+                              e_female_sampled_rate=e_female_sampled/e_total_sampled,
+                              e_female_surveyed_rate=e_female_surveyed/e_total_sampled,
+                              ) %>%
+  select(ps_code, b_female_staff_rate, b_female_officers_rate, b_female_sampled_rate, b_female_surveyed_rate,
+         e_female_staff_rate, e_female_officers_rate, e_female_sampled_rate, e_female_surveyed_rate)
+
+all <- admin1 %>% full_join(c_caw, by='ps_code') %>%
+  full_join(c_full,by='ps_code') %>%
+  full_join(police1, by='ps_code') %>%
+  full_join(police2, by='ps_code')
+# view(all)
+# str(all)
+all[is.na(all)] = 0
+
+```
+  
+## Introduction
+  
+Although violence against women is illegal in China, few studies have been published on this issue in the country. In 2021, Beijing, China, was mentioned in the "Beijing Municipal Judicial Big Data Analysis Report on Cases Involving Domestic Violence" that, according to the third China Women's Social Status Survey of Chinese Women by the China Women's Federation and the National Bureau of Statistics, domestic violence exists in approximately 24.7% of the 270 million households across China, with 90% of the victims being women. However, Beijing has recorded less than 0.01% of domestic violence-related cases from 2016 to 2021 (Niu & Li, 2022).
+  
+These data raise questions and challenges for the Chinese social governance system: How should we understand the gap between the Domestic Incident Report (DIR) rate and the reality in China? What actions could help improve the current Gender-Based Violence (GBV) issue in China?
+  
+An experimental evaluation of reforms in India, another developing country, might provide some insights and motivation to support future social change in China.  
+  
+## Literature Review
+  
+Based on data collected from 180 police stations, the issue of gender-based violence (GBV) was explored in India, a country with alarmingly high rates of GBV and limited police capacity, by studying the impact of Women's Help Desks (WHDs) - dedicated spaces for women in local police stations staffed by trained officers (Sukhtankar et al., 2022).
+  
+GBV and weak law enforcement are challenges faced by countries worldwide. The ability to report crimes to the police is an essential step in accessing the justice system and promoting women's security (Sukhtankar et al., 2022). However, social barriers such as stigma and low trust in the police (Blair et al., 2021; Kuo et al., 2021) can discourage women from reporting crimes. Additionally, cultures in East and South Asia often encourage women to accept male dominance and privilege unconditionally, and victims may be inclined to accept or justify their experiences and keep conflicts within families, which can make the decision to report abuse more difficult (Boonzaier, 2008; Yoshioka et al., 2001). Moreover, modern institutions such as police and social services may provide initially helpful services to abused women, but these services are often limited due to resource shortages (Kuo et al., 2021).
+  
+To evaluate the impact of a police reform, researchers in India conducted a large randomized controlled trial across 180 stations serving a population of 23.4 million (Sukhtankar et al., 2022). The trial evaluated the impact of introducing WHDs - dedicated spaces within regular (mixed gender) police stations that are mandated to respond to women's cases, staffed by officers trained in assisting women, and supported through routine monitoring and community outreach.
+  
+The result of this study shows a sharp increase in Domestic Incident Reports (DIRs) after the official launch of the program in May 2019, as demonstrated in Figure 1.  
+  
+```{r}
+theme_set(theme_bw())
+
+admin_m <- admin %>% group_by(month, treatment) %>% summarise(s_dir_count = sum(dir_count))
+# admin_m
+admin_m$month <- as.Date(admin_m$month, '%m%d%y')
+First_police_training <- as.Date('2018-07-01')
+Intervention_launch <- as.Date('2019-05-01')
+C19_lockdown <- as.Date('2020-04-01')
+admin_m$treatment <- factor(admin_m$treatment, levels=c(0,1), labels=c('Control', 'Treatment'))
+
+g <- ggplot(admin_m, mapping = aes(x=month, y=s_dir_count/100, group=treatment, color=treatment)) +
+  geom_line() +
+  geom_point(size=1) +
+  xlab("Month") + 
+  ylab("Average DIRs filed per month") +
+  ggtitle('Figure 1: Domestic incident registration increased sharply')
+# g+geom_hline(aes(yintercept=3))
+# g
+g + 
+  geom_vline(aes(xintercept=First_police_training)) +
+  geom_text(aes(First_police_training, 4, label='First police training', hjust=-0.1), color='black'
+            ) +
+  geom_vline(aes(xintercept=Intervention_launch)) +
+  geom_text(aes(Intervention_launch, 4, label='Intervention launch', hjust=-0.1), color='black') +
+  geom_vline(aes(xintercept=C19_lockdown)) +
+  geom_text(aes(C19_lockdown, 3, label='COVID 19 lockdown', hjust=1.1), color='black')
+
+# d_stat <- data.frame(Mean=, Standard_Deviation, Minimum, Median, Maximum)
+
+```
+  
+It was also found that officers in stations with Women's Help Desks (WHDs) were more likely to register cases of gender-based violence (GBV) and other complaints filed by women, especially when female officers were (randomly) assigned to run the help desks, as shown in Figure 2.
+  
+```{r}
+
+admin_n <- admin %>% group_by(month, group) %>% summarise(f_caw = sum(fir_caw_count))
+# admin_m
+admin_n$month <- as.Date(admin_n$month, '%m%d%y')
+# First_police_training <- as.Date('2018-07-01')
+# Intervention_launch <- as.Date('2019-05-01')
+# C19_lockdown <- as.Date('2020-04-01')
+admin_n$group <- as.factor(admin_n$group)
+
+g <- ggplot(admin_n, mapping = aes(x=month, y=f_caw/100, group=group, color=group)) +
+  geom_line() +
+  geom_point(size=1) +
+  xlab("Month") + 
+  ylab("Average CAW FIRs filed per month") +
+  ggtitle('Figure 2: Registration of crimes against women increased in women-run WHDs')
+# g+geom_hline(aes(yintercept=3))
+# g
+g + 
+  geom_vline(aes(xintercept=First_police_training)) +
+  geom_text(aes(First_police_training, 4, label='First police training', hjust=-0.1), color='black'
+            ) +
+  geom_vline(aes(xintercept=Intervention_launch)) +
+  geom_text(aes(Intervention_launch, 4, label='Intervention launch', hjust=-0.1), color='black') +
+  geom_vline(aes(xintercept=C19_lockdown)) +
+  geom_text(aes(C19_lockdown, 3, label='COVID 19 lockdown', hjust=1.1), color='black')
+
+# d_stat <- data.frame(Mean=, Standard_Deviation, Minimum, Median, Maximum)
+
+```
+
+  
+## Methods and Sample
+  
+### The cleaning process
+  
+I selected 26 variables out of 135 based on my knowledge of what could influence police responsiveness to women. There are 180 police stations and 25 other variables, except for ps_code (police station ID), which serves as a key ID variable.
+  
+When I joined the data, I found many missing values and chose to ignore them while calculating the sum for the variables fir_caw, fir_bywomen, arrest, dir, and the mean for the others.
+  
+When doing descriptive statistics for the joined data, I found a missing value in b_female_officers_rate and replaced the "NaN" with 0.
+  
+After performing descriptive statistics on the raw data, I will randomize the dataset and prepare it for regressio
+  
+### Descriptive statistics of the sample
+  
+The tables below show the descriptive statistics of 25 variables except ps_code.
+  
+```{r}
+calcuator <- function(vec) {
+  Mmean <- round(mean(vec), digits = 2)
+  std <- round(sd(vec), digits = 2)
+  minimum <- round(min(vec), digits = 2)
+  # q1 <- quantile(vec, probs = .25)
+  medianVec <- round(median(vec), digits = 2)
+  # q3 <- quantile(vec, probs = .75)
+  maximum <- round(max(vec), digits = 2)
+  out <- c(Mmean, std, minimum, medianVec, maximum)
+  names(out) <- c("Mean", "Standard_Deviation","Minimum", "Median", "Maximum")
+  return(out)
+}
+# view(all)
+
+# all[,-1]
+d <- apply(na.omit(all[,-1]), MARGIN = 2, FUN=calcuator)
+# str(d)
+# d <- rbind(apply(all[,-1], MARGIN = 2, FUN=calcuator))
+d_table1 <- kable(d[,1:8])
+kableExtra::kable_styling(d_table1, bootstrap_options = "striped",
+                          full_width = FALSE)
+
+```
+  
+"regular_whd" is a categorical variable representing whether there is a regular Women's Help Desk (WHD). If the value equals 1, then there is a regular WHD; if not, then there is no regular WHD.
+  
+There are 61 (34%) police stations that have regular WHDs, while 119 (66%) police stations do not have regular WHDs.
+  
+```{r}
+all1 <- all
+all1$regular_whd <- cut(all1$regular_whd, 2, labels = c('Others','Regular WHD'))
+all1$women_whd <- cut(all1$women_whd, 2, labels = c('Others', 'Women-run WHD'))
+
+regular_whd_frequency <- table(all1$regular_whd)
+
+options(digits=2)
+regular_whd_propotion <- prop.table(table(all1$regular_whd))
+t1_all <- rbind(regular_whd_frequency, regular_whd_propotion)
+kableExtra::kable_styling(kable(t1_all), bootstrap_options = "striped",
+                          full_width = FALSE)
+
+```
+  
+"women_whd" is a categorical variable representing whether there is a women-run Women's Help Desk (WHD). If the value equals 1, then there is a women-run WHD; if not, then there is no women-run WHD.
+  
+There are 61 (33%) police stations that have regular WHDs, while 119 (67%) police stations do not have regular WHDs.
+  
+```{r}
+women_whd_frequency <- table(all1$women_whd)
+
+options(digits=2)
+women_whd_propotion <- prop.table(table(all1$women_whd))
+t2_all <- rbind(women_whd_frequency, women_whd_propotion)
+
+kableExtra::kable_styling(kable(t2_all), bootstrap_options = "striped",
+                          full_width = FALSE)
+
+# str(all)
+
+```
+  
+"fir_caw" means the number of First Information Reports filed in CAW cases.
+  
+"fir_bywomen" is the number of First Information Reports filed by women.
+  
+"arrest" represents the number of arrests made.
+  
+"dir" is the number of Domestic Incidence Reports filed.
+  
+"b_caw_rate" shows the CAW rate corresponding to a police station at baseline.
+  
+"e_caw_rate" shows the CAW rate corresponding to a police station at endline.
+
+```{r}
+d_table2 <- kable(d[,9:17])
+kableExtra::kable_styling(d_table2, bootstrap_options = "striped",
+                          full_width = FALSE)
+
+```
+  
+"b_pol_handling" is the perceptions of police’s effectiveness in dealing with CAW at baseline.
+  
+"e_pol_handling" is the perceptions of police’s effectiveness in dealing with CAW at endline.
+  
+"b_safety" represents the level of safety a person felt at home, in their neighborhood and in the crowd at baseline.
+
+"e_safety" represents the level of safety a person felt at home, in their neighborhood and in the crowd at endline.
+  
+"e_taken_seriously" shows the perceptions of whether female officers’ opinions are taken seriously in the workplace
+  
+"b_wcase" means the baseline index for police’s attention to women’s cases.
+  
+"e_wcase" means the endline index for police’s attention to women’s cases
+  
+"b_effective" is the baseline index for perception of police’s effectiveness in dealing with cases related to women.
+  
+"e_effective" is the endline index for perception of police’s effectiveness in dealing with cases related to women.
+
+```{r}
+
+d_table3 <- kable(d[,18:21])
+kableExtra::kable_styling(d_table3, bootstrap_options = "striped",
+                          full_width = FALSE)
+```
+  
+"b_female_staff_rate" is the rate of female staff members in a station at baseline.
+  
+"b_female_officers_rate" represents the rate of female officers with rank ASI (Assistant sub-inspector) or higher at baseline.
+  
+"b_female_sampled_rate" is the rate of female staff members that were sampled at baseline.
+  
+"b_female_surveyed_rate" is the rate of female staff members that were surveyed at baseline.
+  
+```{r}
+
+d_table4 <- kable(d[,22:25])
+kableExtra::kable_styling(d_table4, bootstrap_options = "striped",
+                          full_width = FALSE)
+
+```
+  
+"e_female_staff_rate" is the rate of all female staff members in a station at endline.
+  
+"e_female_officers_rate" represents the rate of female officers with rank ASI (Assistant sub-inspector) or higher at endline.
+  
+"e_female_sampled_rate" is the rate of female staff members that were sampled at endline.
+  
+"e_female_surveyed_rate" is the rate of female staff members that were surveyed at endline.
+  
+Detailed visualizations will be presented in the next section.
+  
+### Methods
+  
+I will use box plots to identify outliers and get a rough understanding of a variable, bar plots to understand the distribution of the data, scatter plots to see the relationship between different groups of data, corrplots to examine the relationship between variables, Q-Q plots to check the residual normality assumption, and residual plots to check the linearity assumption.
+  
+## Findings
+  
+### Findings from Boxplots
+  
+From the boxplots, we can see the outliers and mean values of each variable.
+  
+There are a few findings here:
+  
+1. People's perceptions of safety and police effectiveness decreased at the endline compared to the baseline, which may be due to the COVID-19 lockdown causing difficulties in reporting crimes.
+2. The variables arrest, dir, and e_caw_rate have the most outliers.
+3. Except for people's perceptions of safety and police effectiveness, other paired variables show increases from the baseline to the endline.
+  
+```{r}
+
+b1 <- ggplot(all, mapping=aes(x=fir_caw))+geom_boxplot()
+b2 <- ggplot(all, mapping=aes(x=fir_bywomen))+geom_boxplot()
+b3 <- ggplot(all, mapping=aes(x=arrest))+geom_boxplot()
+b4 <- ggplot(all, mapping=aes(x=dir))+geom_boxplot()
+b5 <- ggplot(all, mapping=aes(x=b_caw_rate))+geom_boxplot()
+b6 <- ggplot(all, mapping=aes(x=e_caw_rate))+geom_boxplot()
+b7 <- ggplot(all, mapping=aes(x=b_pol_handling))+geom_boxplot()
+b8 <- ggplot(all, mapping=aes(x=e_pol_handling))+geom_boxplot()
+b9 <- ggplot(all, mapping=aes(x=b_safety))+geom_boxplot()
+b10 <- ggplot(all, mapping=aes(x=e_safety))+geom_boxplot()
+b11 <- ggplot(all, mapping=aes(x=e_taken_seriously))+geom_boxplot()
+b12 <- ggplot(all, mapping=aes(x=b_wcase))+geom_boxplot()
+b13 <- ggplot(all, mapping=aes(x=e_wcase))+geom_boxplot()
+b14 <- ggplot(all, mapping=aes(x=b_effective))+geom_boxplot()
+b15 <- ggplot(all, mapping=aes(x=e_effective))+geom_boxplot()
+b16 <- ggplot(all, mapping=aes(x=b_female_staff_rate))+geom_boxplot()
+b17 <- ggplot(all, mapping=aes(x=b_female_officers_rate))+geom_boxplot()
+b18 <- ggplot(all, mapping=aes(x=b_female_sampled_rate))+geom_boxplot()
+b19 <- ggplot(all, mapping=aes(x=b_female_surveyed_rate))+geom_boxplot()
+b20 <- ggplot(all, mapping=aes(x=e_female_staff_rate))+geom_boxplot()
+b21 <- ggplot(all, mapping=aes(x=e_female_officers_rate))+geom_boxplot()
+b22 <- ggplot(all, mapping=aes(x=e_female_sampled_rate))+geom_boxplot()
+b23 <- ggplot(all, mapping=aes(x=e_female_surveyed_rate))+geom_boxplot()
+
+b1+b2+b3+b4+b5+b6+b7+b8+b9+b10+b11+b12
+b13+b14+b15+b16+b17+b18+b19+b20+b21+b22+b23
+
+
+```
+  
+### Findings from histograms
+  
+From the histograms, we can see that fir_caw, arrest, dir, b_caw_rate, e_caw_rate, e_taken_seriously, b_female_staff_rate, b_female_officers_rate, e_female_staff_rate, and e_female_officers_rate are left-skewed. Meanwhile, b_pol_handling, e_pol_handling, b_wcase, e_wcase, b_effective, and e_effective are skewed to the right.
+  
+We can also see that, compared to the reports of crimes, the rate of arrests is left-skewed, indicating a low rate.
+  
+The third finding is that, after the treatment, the rate of female staff and female officers increased.
+  
+```{r}
+
+h1 <- ggplot(all, mapping=aes(x=fir_caw))+geom_histogram()
+h2 <- ggplot(all, mapping=aes(x=fir_bywomen))+geom_histogram()
+h3 <- ggplot(all, mapping=aes(x=arrest))+geom_histogram()
+h4 <- ggplot(all, mapping=aes(x=dir))+geom_histogram()
+h5 <- ggplot(all, mapping=aes(x=b_caw_rate))+geom_histogram()
+h6 <- ggplot(all, mapping=aes(x=e_caw_rate))+geom_histogram()
+h7 <- ggplot(all, mapping=aes(x=b_pol_handling))+geom_histogram()
+h8 <- ggplot(all, mapping=aes(x=e_pol_handling))+geom_histogram()
+h9 <- ggplot(all, mapping=aes(x=b_safety))+geom_histogram()
+h10 <- ggplot(all, mapping=aes(x=e_safety))+geom_histogram()
+h11 <- ggplot(all, mapping=aes(x=e_taken_seriously))+geom_histogram()
+h12 <- ggplot(all, mapping=aes(x=b_wcase))+geom_histogram()
+h13 <- ggplot(all, mapping=aes(x=e_wcase))+geom_histogram()
+h14 <- ggplot(all, mapping=aes(x=b_effective))+geom_histogram()
+h15 <- ggplot(all, mapping=aes(x=e_effective))+geom_histogram()
+h16 <- ggplot(all, mapping=aes(x=b_female_staff_rate))+geom_histogram()
+h17 <- ggplot(all, mapping=aes(x=b_female_officers_rate))+geom_histogram()
+h18 <- ggplot(all, mapping=aes(x=b_female_sampled_rate))+geom_histogram()
+h19 <- ggplot(all, mapping=aes(x=b_female_surveyed_rate))+geom_histogram()
+h20 <- ggplot(all, mapping=aes(x=e_female_staff_rate))+geom_histogram()
+h21 <- ggplot(all, mapping=aes(x=e_female_officers_rate))+geom_histogram()
+h22 <- ggplot(all, mapping=aes(x=e_female_sampled_rate))+geom_histogram()
+h23 <- ggplot(all, mapping=aes(x=e_female_surveyed_rate))+geom_histogram()
+
+h1+h2+h3+h4+h5+h6+h7+h8+h9+h10+h11+h12
+h13+h14+h15+h16+h17+h18+h19+h20+h21+h22+h23
+
+
+```
+  
+### Findings from corrplot
+  
+This is a corrplot of the 26 variables. The detailed correlation tables below provide a clearer understanding of the relationships between variables.
+  
+```{r}
+cor1 <- round(cor(all),2)
+
+corrplot(cor1, method = "color",order = "hclust")
+
+
+```
+  
+From the tables, we can conclude that the grouped variables with an absolute correlation coefficient larger than 0.5 are:
+  
+fir_bywomen and fir_caw; arrest and fir_caw; arrest and fir_bywomen; the rates between different sub-samples. All of these correlations are positive.
+  
+```{r}
+
+# cor2 <- ifelse(abs(cor1) > 0.5, cor1,0)
+cor_table1 <- kable(cor1[,1:11])
+kableExtra::kable_styling(cor_table1, bootstrap_options = "striped",
+                          full_width = FALSE)
+cor_table2 <- kable(cor1[,12:20])
+kableExtra::kable_styling(cor_table2, bootstrap_options = "striped",
+                          full_width = FALSE)
+cor_table3 <- kable(cor1[,21:26])
+kableExtra::kable_styling(cor_table3, bootstrap_options = "striped",
+                          full_width = FALSE)
+
+```
+  
+### Exploring the relationship of correlated variables
+  
+The detailed scatter plots of correlated variables are shown below. We can see that fir_caw and fir_bywomen are highly related. The scatter plots of rates of female groups also show different layers.
+  
+```{r}
+
+p1 <- ggplot(all, mapping=aes(x=fir_caw, y=fir_bywomen))+geom_point()
+p15 <- ggplot(all1, mapping=aes(x=fir_caw, y=fir_bywomen, color=regular_whd))+geom_point()
+p16 <- ggplot(all1, mapping=aes(x=fir_caw, y=fir_bywomen, color=women_whd))+geom_point()
+p2 <- ggplot(all, mapping=aes(x=fir_caw, y=arrest))+geom_point()
+p17 <- ggplot(all1, mapping=aes(x=fir_caw, y=arrest, color=regular_whd))+geom_point()
+p18 <- ggplot(all1, mapping=aes(x=fir_caw, y=arrest, color=women_whd))+geom_point()
+p3 <- ggplot(all, mapping=aes(x=fir_bywomen, y=arrest))+geom_point()
+p19 <- ggplot(all1, mapping=aes(x=fir_bywomen, y=arrest, color=regular_whd))+geom_point()
+p20 <- ggplot(all1, mapping=aes(x=fir_bywomen, y=arrest, color=women_whd))+geom_point()
+p4 <- ggplot(all, mapping=aes(x=b_female_staff_rate, y=b_female_sampled_rate))+geom_point()
+p5 <- ggplot(all, mapping=aes(x=b_female_staff_rate, y=b_female_surveyed_rate))+geom_point()
+p6 <- ggplot(all, mapping=aes(x=b_female_staff_rate, y=e_female_sampled_rate))+geom_point()
+p7 <- ggplot(all, mapping=aes(x=b_female_officers_rate, y=b_female_sampled_rate))+geom_point()
+p8 <- ggplot(all, mapping=aes(x=b_female_officers_rate, y=b_female_surveyed_rate))+geom_point()
+p9 <- ggplot(all, mapping=aes(x=b_female_sampled_rate, y=b_female_surveyed_rate))+geom_point()
+p10 <- ggplot(all, mapping=aes(x=b_female_sampled_rate, y=e_female_sampled_rate))+geom_point()
+p11 <- ggplot(all, mapping=aes(x=b_female_sampled_rate, y=e_female_surveyed_rate))+geom_point()
+p12 <- ggplot(all, mapping=aes(x=b_female_surveyed_rate, y=e_female_sampled_rate))+geom_point()
+p13 <- ggplot(all, mapping=aes(x=e_female_staff_rate, y=e_female_officers_rate))+geom_point()
+p14 <- ggplot(all, mapping=aes(x=e_female_sampled_rate, y=e_female_surveyed_rate))+geom_point()
+
+p1+p15+p16
+p2+p17+p18
+p3+p19+p20
+p4+p5+p6+p7+p8+p9
+p10+p11+p12+p13+p14
+
+```
+  
+### Findings from linear regression
+  
+A linear regression of all 26 variables is fitted, with fir_caw as the dependent variable and the others as independent variables.
+  
+From the summary of this model, we can see that fir_bywomen and arrest are the most correlated variables.
+  
+The residuals appear to be plausibly normal. There is some deviation outside of the 95% bootstrap confidence bands, but it is not far from the mean. Although there is some deviation from the zero horizontal line, we can say the model is well-fitted.
+  
+```{r}
+
+all2 <- scale(all[4:26], center = T, scale = T)
+all2 <- cbind(all[1:3],all2)
+lm1 <- lm(fir_caw ~ ., data = all2)
+summary(lm1)
+
+# library(car)
+# residualPlot(lm1)
+par(mfrow=c(2,2))
+plot(lm1)
+
+```
+  
+A linear regression of the two most related variables as independent variables is fitted, as shown below.
+  
+The residuals appear to be plausibly normal. There is some deviation outside of the 95% bootstrap confidence bands, but it is not far from the mean. This model is better than the first one.
+  
+```{r}
+
+lm2 <- lm(fir_caw ~ fir_bywomen+arrest, data=all2)
+par(mfrow=c(2,2))
+plot(lm2)
+
+```
+  
+## Discussion and Conclusion
+  
+In the original study, the researchers found that even in resource-constrained and patriarchal environments, efforts that focus attention on women's cases can significantly impact police behavior, making officers more responsive to women's security concerns (Sukhtankar et al., 2022). This conclusion can be summarized from Figure 2. However, the results of a linear regression in the current study suggest that only the number of First Information Reports (FIRs) filed by women and the number of arrests contribute to the number of FIRs filed in cases of crimes against women (CAW). This means that if more FIRs are filed by women staff or officers, the police station will be more responsive to CAW cases. It is reasonable to increase the number of women handling desks (WHDs) to raise the status of women staff or officers in police stations.
+  
+A more effective solution to the problem might be to increase the number of women in police enforcement. Strategies could include promoting work-life balance, providing training and support to women in policing, and supporting promotion and advancement (Bostwick, 2014; Fjeld, 2016; Slocum, 2013). Some Chinese scholars have also suggested a sociological approach, including awareness of the needs of family violence victims and appropriate and immediate assistance from both governmental and non-governmental organizations (NGOs) and agencies and service sectors (Hou et al., 2022; Zhang, 2020). In addition, the society should focus on establishing appropriate prevention mechanisms for men's participation in violence against women, including special masculinity guidance and discussion groups or related institutions to emphasize the relationship between masculinity, gender roles, and violence (Niu & Li, 2022).
+  
+This data exploratory data analysis project has several limitations. Firstly, there are many missing values which may result in an incomplete reflection of the situation. Secondly, most of the variables are skewed, which can lead to biased or misleading results as they may not be representative of the entire population. Thirdly, the sample size is relatively small, which may impact the accuracy and reliability of the results. Finally, because this is a reuse of a dataset without participation in the data collection process, the results of the data analysis project may be misinterpreted or misunderstood, leading to incorrect conclusions.
+  
+## References
+  
+1. Dataset: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/R75XVZ
+
+2. Blair, G., Weinstein, J. M., Christia, F., Arias, E., Badran, E., Blair, R. A., Cheema, A., Farooqui, A., Fetzer, T., & Grossman, G. (2021). Community policing does not build citizen trust in police or reduce crime in the Global South. Science, 374(6571), eabd3446. 
+
+3. Boonzaier, F. (2008). If the man says you must sit, then you must sit': The relational construction of woman abuse: Gender, subjectivity and violence. Feminism & Psychology, 18(2), 183-206. 
+
+4. Bostwick, L. (2014). Strategies for increasing the number of women in law enforcement. Police Chief, 81(3), 36-41.
+
+5. Fjeld, K. (2016). Achieving gender balance in the police: A review of initiatives and approaches. Policing: A Journal of Policy and Practice, 10(4), 395-407.
+
+6. Hou, F., Cerulli, J., Wittink, M., Caine, E. D., Thompson-Stone, M., & Qiu, P. (2022). Rural Chinese Women’s Recognition of Intimate Partner Violence and their Potential Coping Strategies: A Qualitative Study. Journal of family violence, 37(4), 613-628. 
+
+7. Kuo, S.-Y., Zhang, H., & Zhao, R. (2021). Research on family violence in Greater China: opportunities, challenges, and development. Journal of family violence, 36(6), 637-641. 
+
+8. Niu, C., & Li, W. (2022). Insight, Reconstruction, and Change: A Qualitative Study of Gender-Based Violence in China. International Journal of Social Science Research and Review, 5(10), 66-79. 
+
+9. Slocum, L. (2013). Achieving gender balance in policing: An examination of strategies for increasing the representation of women in law enforcement. Police Practice and Research, 14(2), 125-138.
+
+10. Sukhtankar, S., Kruks-Wisner, G., & Mangla, A. (2022). Policing in patriarchy: An experimental evaluation of reforms to improve police responsiveness to women in India. Science, 377(6602), 191-198. 
+
+11. Yoshioka, M. R., DiNoia, J., & Ullah, K. (2001). Attitudes toward marital violence: An examination of four Asian communities. Violence against women, 7(8), 900-926. 
+
+12. Zhang, H. (2020). The influence of the ongoing COVID-19 pandemic on family violence in China. Journal of family violence, 1-11. 
+
+
+
+
